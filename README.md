@@ -37,7 +37,7 @@ It is not a general chatbot. It is designed for grounded analysis over critical 
 
 ## Quick Start
 
-These steps assume you have just downloaded the repository and want to run the app on your own computer.
+These instructions assume you have successfully cloned the repository and are working in the ~/github/Applied_AI_Base directory.
 
 ### 1. Install Python
 
@@ -137,7 +137,7 @@ Do not share your `.env` file. It contains secret keys.
 
 ### 6. Build the Local Corpus
 
-The repository uses PDF files in `data/pdf/`. This command extracts text from them and creates a searchable text file.
+Researchers populate data/pdf/ with publicly available source documents before running the ingestion pipeline. This command extracts text from them and creates a searchable text file.
 
 ```bash
 python -m scripts.02_prepare_energy_json
