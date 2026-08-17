@@ -48,7 +48,7 @@ Install Python 3.10 or newer. The repository has been used with Python 3.13, bas
 Check your version:
 
 ```bash
-python --version
+python3 --version
 ```
 
 What this does: prints the Python version installed on your computer.
