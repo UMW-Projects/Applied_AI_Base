@@ -1,33 +1,40 @@
 # Cybersecurity RAG Assistant
 
-This project is a local question-answering application for critical infrastructure sector cybersecurity research. It helps users ask plain-English questions about critical infrastructure cybersecurity and receive answers grounded in a document collection.
+This project is a local question-answering application for critical
+infrastructure sector cybersecurity research. It helps users ask
+plain-English questions and receive answers grounded in a document
+collection.
 
-The application is built with Python, Streamlit, OpenAI, and Pinecone. In simple terms:
+The application is built with Python, Streamlit, OpenAI, and Pinecone:
 
-- Python runs the application.
-- Streamlit provides the browser-based chat screen.
-- OpenAI turns questions and documents into searchable meaning and writes the final answer.
-- Pinecone stores searchable document chunks.
+-   Python runs the application.
+-   Streamlit provides the browser-based chat screen.
+-   OpenAI turns questions and documents into searchable meaning and
+    writes the final answer.
+-   Pinecone stores searchable document chunks.
 
 ## Who This Is For
 
 This project is for:
 
-- Critical sector cybersecurity analysts.
-- Policy researchers 
-- Developers maintaining a retrieval-augmented generation system.
+-   Critical sector cybersecurity analysts.
+-   Policy researchers.
+-   Developers maintaining a retrieval-augmented generation system.
 
-It is not a general chatbot. It is designed for grounded analysis over critical infrastructure cybersecurity documents.
+It is not a general chatbot. It is designed for grounded analysis over
+critical infrastructure cybersecurity documents.
 
 ## What It Can Do
 
-- Answer questions about critical sector cybersecurity risks.
-- Retrieve evidence from local PDF-derived text chunks.
-- Cite the source documents used for an answer.
-- Group findings by cybersecurity control family.
-- Draft policy recommendations and action plans.
-- Refresh the knowledge base with selected web sources.
-- Run through a browser interface or a command-line script.
+-   Answer questions using retrieved evidence.
+-   Retrieve evidence from document-derived text chunks.
+-   Cite source documents used for an answer.
+-   Group findings by cybersecurity control family.
+-   Draft policy recommendations and action plans.
+-   Refresh the knowledge base with selected web sources.
+-   Run through a browser interface or command-line script.
+-   Decline to answer when sufficient supporting evidence is
+    unavailable.
 
 ## Screenshots
 
@@ -35,230 +42,345 @@ It is not a general chatbot. It is designed for grounded analysis over critical 
 
 ![Answer with sources expanded](image/answer.png)
 
-## Quick Start
+# Quick Start
 
-These instructions assume you have successfully cloned the repository and are working in the ~/github/Applied_AI_Base directory.
+These instructions assume you have already cloned the repository and are
+working in:
 
-### 1. Install Python
+``` text
+~/github/Applied_AI_Base
+```
 
-Python is the program that runs this project.
+The goal of the Quick Start is to verify that the baseline pipeline runs
+successfully. You do **not** need to build or modify the source corpus
+to complete this initial verification.
 
-Install Python 3.10 or newer. The repository has been used with Python 3.13, based on the local virtual environment.
+## 1. Check Python
 
-Check your version:
+The project requires Python 3.10 or newer.
 
-```bash
+On Ubuntu in Windows Subsystem for Linux (WSL), check your version with:
+
+``` bash
 python3 --version
 ```
 
-What this does: prints the Python version installed on your computer.
-
 Expected output:
 
-```text
+``` text
 Python 3.x.x
 ```
 
-If the command is not found, install Python and try again.
+### WSL prerequisite: Python virtual environments
 
-### 2. Create a Virtual Environment
+Some Ubuntu/WSL installations include Python but do not include the
+package required to create Python virtual environments.
 
-A virtual environment is a private folder for this project's Python libraries. It keeps this project separate from other Python projects on your computer.
+If the virtual-environment command in the next step reports that
+`ensurepip` is not available, install the appropriate `venv` package for
+your installed Python version. For example, with Python 3.12:
 
-On macOS or Linux:
-
-```bash
-python -m venv venv
+``` bash
+sudo apt install python3.12-venv
 ```
 
-On Windows:
+`sudo` may ask for your **WSL Ubuntu password**. This is the password
+for your Linux user account inside WSL and may be different from your
+Windows or UMW password.
 
-```powershell
-python -m venv venv
+## 2. Create a Virtual Environment
+
+On WSL/Linux:
+
+``` bash
+python3 -m venv venv
 ```
-
-What this does: creates a folder named `venv/`.
 
 Expected output: usually no text appears. That is normal.
 
-### 3. Turn On the Virtual Environment
+If a failed attempt left an incomplete `venv/` directory:
 
-On macOS or Linux:
+``` bash
+rm -rf venv
+python3 -m venv venv
+```
 
-```bash
+## 3. Turn On the Virtual Environment
+
+``` bash
 source venv/bin/activate
 ```
 
-On Windows PowerShell:
+Your terminal prompt should now begin with `(venv)`.
 
-```powershell
-venv\Scripts\Activate.ps1
+Verify Python inside the environment:
+
+``` bash
+python --version
 ```
 
-What this does: tells your terminal to use this project's private Python setup.
+## 4. Install the Project Libraries
 
-Expected output: your terminal prompt may show `(venv)`.
-
-### 4. Install the Project Libraries
-
-```bash
+``` bash
 pip install -r requirements.txt
 ```
 
-What this does: downloads the Python libraries listed in `requirements.txt`.
-
-Why it matters: the application cannot run until these libraries are installed.
-
 Expected output: many lines ending with a success message.
 
-Common error: if you see `pip: command not found`, try:
+If `pip` is not available inside the activated virtual environment:
 
-```bash
+``` bash
 python -m pip install -r requirements.txt
 ```
 
-### 5. Create Your `.env` File
-
-An environment variable is a setting the app reads when it starts. A `.env` file is a simple text file that stores these settings.
+## 5. Create Your `.env` File
 
 Create a file named `.env` in the project root:
 
-```text
+``` text
 OPENAI_API_KEY=your_openai_api_key_here
 PINECONE_API_KEY=your_pinecone_api_key_here
-PINECONE_INDEX=energy-cyber-index
+PINECONE_INDEX=applied-ai-base
 PINECONE_CLOUD=aws
 PINECONE_REGION=us-east-1
 OPENAI_EMBED_MODEL=text-embedding-3-small
 OPENAI_MODEL=gpt-4.1-mini
 ```
 
-Do not share your `.env` file. It contains secret keys.
+Your instructor will provide the course OpenAI and Pinecone credentials.
 
-### 6. Build the Local Corpus
+Do **not** share your `.env` file or commit it to GitHub. It contains
+secret keys.
 
-Researchers populate data/pdf/ with publicly available source documents before running the ingestion pipeline. This command extracts text from them and creates a searchable text file.
+The Pinecone environment is shared by the class. Coordinate with other
+students before resetting or rebuilding the shared Pinecone index.
 
-```bash
-python -m scripts.02_prepare_energy_json
-```
+> **Note:** The baseline model configuration may be revised by the class
+> as part of CPSC 491. Do not independently change the foundation model
+> unless the class has agreed to do so.
 
-What this does: reads PDFs and writes `data/critical_infra_corpus.jsonl`.
+## 6. Start the Browser App
 
-Expected output: lines that begin with `Processing:` and end with `Done!`.
+With `(venv)` visible in your terminal prompt:
 
-### 7. Upload the Corpus to Pinecone
-
-Pinecone is the searchable memory for the app.
-
-```bash
-python -m scripts.03_index_pinecone --chunks data/critical_infra_corpus.jsonl --reset
-```
-
-What this does: turns each text chunk into a searchable vector and stores it in Pinecone.
-
-Why it matters: without this step, the app may fall back to a slower local search or return weaker answers.
-
-Expected output: progress bars and `Indexing complete`.
-
-Warning: `--reset` deletes the existing contents of the selected Pinecone index before uploading the current corpus.
-
-### 8. Start the Browser App
-
-```bash
+``` bash
 streamlit run streamlit_app.py
 ```
 
-What this does: starts the web interface on your computer.
+The first time Streamlit runs, it may ask whether you want to provide an
+email address. You may leave the field blank and press Enter.
 
-Expected output: Streamlit prints a local address, usually:
+Expected output includes:
 
-```text
+``` text
 Local URL: http://localhost:8501
 ```
 
-Open that address in your browser.
+Open that address in your Windows browser.
 
-## Requirements
+Under WSL, you may see:
 
-| Requirement | Needed? | Notes |
-| --- | --- | --- |
-| Python 3.10 or newer | Yes | Python runs the app and scripts. |
-| OpenAI API key | Yes | Used for embeddings and final answers. |
-| Pinecone account and API key | Yes for full retrieval | Used to store and search document vectors. |
-| SerpAPI key | Optional | Used for live web discovery and refresh. |
-| Internet access | Yes for setup and external services | Needed to install packages and call OpenAI, Pinecone, and optional SerpAPI. |
-| Docker | No | This repo does not include Docker files. |
-| Traditional database | No | The app uses JSONL files and Pinecone, not PostgreSQL, MySQL, or SQLite. |
+``` text
+gio: http://localhost:8501: Operation not supported
+```
 
-## Environment Variables
+This does **not** mean the application failed. WSL simply could not open
+the browser automatically. Open `http://localhost:8501` manually.
 
-| Name | Required? | Default | Description | Example |
-| --- | --- | --- | --- | --- |
-| `OPENAI_API_KEY` | Yes | None | Secret key for OpenAI. | `sk-...` |
-| `PINECONE_API_KEY` | Yes for Pinecone search | None | Secret key for Pinecone. | `pcsk_...` |
-| `PINECONE_INDEX` | Yes for Pinecone search | `reviews-index` in the indexing script only | Pinecone index name. Use one consistent value. | `energy-cyber-index` |
-| `PINECONE_CLOUD` | Needed when creating an index | `aws` | Pinecone cloud provider. | `aws` |
-| `PINECONE_REGION` | Needed when creating an index | `us-east-1` | Pinecone region. | `us-east-1` |
-| `PINECONE_NAMESPACE` | No | Empty string | Optional Pinecone namespace. A namespace separates groups of vectors inside one index. | `nerc-cip` |
-| `OPENAI_EMBED_MODEL` | No | `text-embedding-3-small` | OpenAI model used to create searchable vectors. | `text-embedding-3-small` |
-| `OPENAI_MODEL` | No | `gpt-4.1-mini` | OpenAI model used to write answers. | `gpt-4.1-mini` |
-| `SERPAPI_API_KEY` | Optional | None | Secret key for SerpAPI web search. | `abc123` |
-| `SERPAPI_KEY` | Optional | None | Alternate name supported for SerpAPI. | `abc123` |
-| `ENABLE_SERPAPI_SEARCH` | Optional | `true` | Set to `false` to stop automatic live search during questions. | `false` |
-| `SERPAPI_MAX_RESULTS` | Optional | `3` | Number of live search results used during a question. | `3` |
-| `SERPAPI_QUERY_TEMPLATE` | Optional | `{query} critical infrastructure cybersecurity energy sector` | Search phrase pattern for live web search. | `{query} NERC CIP advisory` |
-| `PINECONE_ID_STRATEGY` | Optional | `url` | How live web chunk IDs are made. `content` uses text content instead. | `url` |
-| `CHROMA_PERSIST_PATH` | No active use found | `./chroma_fcc_storage` | Present in `config.py`, but not used by the current RAG flow. | `./chroma_fcc_storage` |
-| `CHROMA_COLLECTION_NAME` | No active use found | `fcc_documents` | Present in `config.py`, but not used by the current RAG flow. | `fcc_documents` |
+## 7. Verify the Baseline Pipeline
 
-## Running the Project
+When the Streamlit landing page appears, submit a question.
 
-### Development
+If the shared Pinecone index does not contain relevant source material,
+the application may report that it cannot find enough local evidence to
+answer confidently and may return no sources.
 
-Use development mode when you are editing or testing the project locally.
+That is **correct behavior**. The RAG pipeline is designed not to invent
+an answer when adequate supporting evidence is unavailable.
 
-```bash
+For the initial setup, success means:
+
+-   the repository is available locally;
+-   the Python virtual environment starts;
+-   the project libraries install;
+-   Streamlit launches;
+-   the browser interface appears;
+-   the application accepts a question; and
+-   the pipeline responds appropriately, including declining to answer
+    when evidence is unavailable.
+
+At this point, the baseline application is running successfully. Further
+corpus construction, indexing, evaluation, and pipeline modification
+will be performed as part of the course research work.
+
+# Requirements
+
+  -----------------------------------------------------------------------
+  Requirement             Needed?                 Notes
+  ----------------------- ----------------------- -----------------------
+  Python 3.10 or newer    Yes                     Python runs the app and
+                                                  scripts.
+
+  Python `venv` support   Yes                     Required to create the
+                                                  local virtual
+                                                  environment.
+
+  OpenAI API key          Yes                     Used for embeddings and
+                                                  final answers.
+
+  Pinecone API access     Yes for full retrieval  The class uses a shared
+                                                  Pinecone environment.
+
+  SerpAPI key             Optional                Used for live web
+                                                  discovery and refresh.
+
+  Internet access         Yes                     Needed to install
+                                                  packages and call
+                                                  external services.
+
+  Docker                  No                      This repo does not
+                                                  include Docker files.
+
+  Traditional database    No                      The current RAG flow
+                                                  uses JSONL files and
+                                                  Pinecone.
+  -----------------------------------------------------------------------
+
+# Environment Variables
+
+  ------------------------------------------------------------------------------------------------------------------------------------------------------
+  Name                       Required?      Default                                                         Description    Example
+  -------------------------- -------------- --------------------------------------------------------------- -------------- -----------------------------
+  `OPENAI_API_KEY`           Yes            None                                                            Secret key for `sk-...`
+                                                                                                            OpenAI.        
+
+  `PINECONE_API_KEY`         Yes for        None                                                            Secret key for `pcsk_...`
+                             Pinecone                                                                       Pinecone.      
+                             search                                                                                        
+
+  `PINECONE_INDEX`           Yes for        `reviews-index` in indexing script                              Shared         `applied-ai-base`
+                             Pinecone                                                                       Pinecone index 
+                             search                                                                         name.          
+
+  `PINECONE_CLOUD`           Needed when    `aws`                                                           Pinecone cloud `aws`
+                             creating an                                                                    provider.      
+                             index                                                                                         
+
+  `PINECONE_REGION`          Needed when    `us-east-1`                                                     Pinecone       `us-east-1`
+                             creating an                                                                    region.        
+                             index                                                                                         
+
+  `PINECONE_NAMESPACE`       No             Empty string                                                    Optional       `research-test`
+                                                                                                            Pinecone       
+                                                                                                            namespace.     
+
+  `OPENAI_EMBED_MODEL`       No             `text-embedding-3-small`                                        OpenAI         `text-embedding-3-small`
+                                                                                                            embedding      
+                                                                                                            model.         
+
+  `OPENAI_MODEL`             No             `gpt-4.1-mini`                                                  OpenAI answer  `gpt-4.1-mini`
+                                                                                                            model in the   
+                                                                                                            current        
+                                                                                                            baseline.      
+
+  `SERPAPI_API_KEY`          Optional       None                                                            Secret key for `abc123`
+                                                                                                            SerpAPI.       
+
+  `SERPAPI_KEY`              Optional       None                                                            Alternate      `abc123`
+                                                                                                            SerpAPI        
+                                                                                                            variable name. 
+
+  `ENABLE_SERPAPI_SEARCH`    Optional       `true`                                                          Enables        `false`
+                                                                                                            automatic live 
+                                                                                                            search.        
+
+  `SERPAPI_MAX_RESULTS`      Optional       `3`                                                             Number of live `3`
+                                                                                                            search         
+                                                                                                            results.       
+
+  `SERPAPI_QUERY_TEMPLATE`   Optional       `{query} critical infrastructure cybersecurity energy sector`   Live-search    `{query} NERC CIP advisory`
+                                                                                                            query pattern. 
+
+  `PINECONE_ID_STRATEGY`     Optional       `url`                                                           Strategy for   `url`
+                                                                                                            live web chunk 
+                                                                                                            IDs.           
+  ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+# Running the Project
+
+## Development
+
+``` bash
 streamlit run streamlit_app.py
 ```
 
-Expected result: the browser app opens and lets you ask questions.
+## Command-Line Query
 
-### Command-Line Query
-
-Use this when you want a JSON answer in the terminal.
-
-```bash
+``` bash
 python -m scripts.04_query_bot --q "What are NERC CIP access control requirements?"
 ```
 
-Add debug information:
+With debug information:
 
-```bash
+``` bash
 python -m scripts.04_query_bot --q "How should incident response be handled in OT systems?" --debug
 ```
 
-### Testing and Evaluation
+## Testing and Evaluation
 
-This repository does not include a separate unit test suite. It does include an evaluation script that checks sample grounded responses.
-
-```bash
+``` bash
 python -m scripts.05_eval_grounding
 ```
 
-What this does: runs several sample questions and writes results to `data/eval_results.jsonl`.
+This runs sample questions and writes results to
+`data/eval_results.jsonl`.
 
-Expected output: `[PASS]` lines or a list of failed checks.
+# Corpus and Pinecone Maintenance
 
-### Production
+These tasks are **not required merely to verify that the baseline
+application runs**. Use them when the class deliberately creates,
+changes, or re-indexes the research corpus.
 
-TODO: Information could not be determined automatically.
+## Build the Local Corpus
 
-No production deployment files, process manager files, container files, or cloud deployment configuration were found in the repository.
+Populate `data/pdf/` with approved source documents, then run:
 
-## Repository Structure
+``` bash
+python -m scripts.02_prepare_energy_json
+```
 
-```text
+This reads PDFs and writes `data/critical_infra_corpus.jsonl`.
+
+The repository may intentionally contain no source PDFs at the beginning
+of a research cycle. Source selection and corpus construction may be
+part of the course research work.
+
+## Upload the Corpus to Pinecone
+
+``` bash
+python -m scripts.03_index_pinecone --chunks data/critical_infra_corpus.jsonl --reset
+```
+
+**Warning:** `--reset` deletes the existing contents of the selected
+Pinecone index before uploading the current corpus. Because the class
+uses a shared Pinecone environment, coordinate with the other students
+before running this command.
+
+## Add Web Sources to Pinecone
+
+``` bash
+python -m scripts.06_ingest_web_sources --url https://example.gov/example-page
+```
+
+Preview without writing:
+
+``` bash
+python -m scripts.06_ingest_web_sources --dry-run
+```
+
+# Repository Structure
+
+``` text
 .
 ├── app/
 ├── data/
@@ -271,162 +393,174 @@ No production deployment files, process manager files, container files, or cloud
 └── README.md
 ```
 
-| Path | Purpose |
-| --- | --- |
-| `app/` | Core application code for retrieval and answer generation. |
-| `app/rag.py` | Main retrieval-augmented generation pipeline. |
-| `app/control_families.py` | Control-family keyword detection. |
-| `control_families.py` | Duplicate top-level control-family helper used by scripts. |
-| `data/` | Local corpus and source PDFs. |
-| `data/pdf/` | PDF documents used to build the corpus. |
-| `data/critical_infra_corpus.jsonl` | Extracted text chunks used for retrieval. |
-| `scripts/` | Command-line maintenance and workflow scripts. |
-| `streamlit_app.py` | Browser-based user interface. |
-| `config.py` | Environment loading helpers. |
-| `requirements.txt` | Python libraries needed by the project. |
-| `docs/` | Full end-user and maintainer documentation. |
+  ------------------------------------------------------------------------
+  Path                                 Purpose
+  ------------------------------------ -----------------------------------
+  `app/`                               Core application code for retrieval
+                                       and answer generation.
 
-## Common Tasks
+  `app/rag.py`                         Main retrieval-augmented generation
+                                       pipeline.
 
-### Rebuild the corpus from PDFs
+  `app/control_families.py`            Control-family keyword detection.
 
-```bash
-python -m scripts.02_prepare_energy_json
-```
+  `control_families.py`                Duplicate top-level control-family
+                                       helper used by scripts.
 
-Use this after adding or removing PDF files in `data/pdf/`.
+  `data/`                              Local corpus and source files.
 
-### Re-upload the corpus to Pinecone
+  `data/pdf/`                          PDF documents used to build the
+                                       corpus when present.
 
-```bash
-python -m scripts.03_index_pinecone --chunks data/critical_infra_corpus.jsonl --reset
-```
+  `data/critical_infra_corpus.jsonl`   Extracted text chunks used for
+                                       retrieval when generated.
 
-Use this after rebuilding the corpus.
+  `scripts/`                           Command-line maintenance and
+                                       workflow scripts.
 
-### Add web sources to Pinecone
+  `streamlit_app.py`                   Browser-based user interface.
 
-```bash
-python -m scripts.06_ingest_web_sources --url https://example.gov/example-page
-```
+  `config.py`                          Environment loading helpers.
 
-Use this when you have a specific source URL to ingest.
+  `requirements.txt`                   Python libraries needed by the
+                                       project.
 
-Preview without writing to Pinecone:
+  `docs/`                              Full end-user and maintainer
+                                       documentation.
+  ------------------------------------------------------------------------
 
-```bash
-python -m scripts.06_ingest_web_sources --dry-run
-```
+# Common Tasks
 
-### Ask a question in the terminal
-
-```bash
-python -m scripts.04_query_bot --q "What are common attack vectors against energy-sector ICS?"
-```
-
-### Restart the app
+## Restart the App
 
 Stop Streamlit with `Control+C`, then run:
 
-```bash
+``` bash
 streamlit run streamlit_app.py
 ```
 
-## Troubleshooting
+## Rebuild the Corpus
 
-### `Missing env var: OPENAI_API_KEY`
-
-Cause: the app cannot find your OpenAI key.
-
-Fix: create or update `.env` and include:
-
-```text
-OPENAI_API_KEY=your_openai_api_key_here
+``` bash
+python -m scripts.02_prepare_energy_json
 ```
 
-Verification: restart the app and ask a question.
+## Re-upload the Corpus to Pinecone
 
-### `Missing OPENAI_API_KEY or PINECONE_API_KEY`
-
-Cause: the indexing script needs both keys.
-
-Fix: add both values to `.env`.
-
-Verification:
-
-```bash
-python -m scripts.03_index_pinecone --chunks data/critical_infra_corpus.jsonl
+``` bash
+python -m scripts.03_index_pinecone --chunks data/critical_infra_corpus.jsonl --reset
 ```
 
-### `No module named app`
+Coordinate with the class before using `--reset`.
 
-Cause: the script was run as a file path instead of a Python module.
+# Troubleshooting
 
-Fix: run scripts with `python -m`.
+## `python: command not found` before the virtual environment is active
 
-Use:
+On Ubuntu/WSL, use:
 
-```bash
+``` bash
+python3 --version
+python3 -m venv venv
+```
+
+After the virtual environment is activated, `python` should be
+available.
+
+## Virtual environment fails because `ensurepip` is unavailable
+
+Install the `venv` package matching your Python version. For Python
+3.12:
+
+``` bash
+sudo apt install python3.12-venv
+```
+
+Then recreate the virtual environment.
+
+## `Missing env var: OPENAI_API_KEY`
+
+Add `OPENAI_API_KEY` to `.env`.
+
+## `Missing OPENAI_API_KEY or PINECONE_API_KEY`
+
+Add both values to `.env`.
+
+## `No module named app`
+
+Use module execution:
+
+``` bash
 python -m scripts.04_query_bot --q "test question"
 ```
 
 Avoid:
 
-```bash
+``` bash
 python scripts/04_query_bot.py
 ```
 
-### Empty or weak answers
+## Streamlit starts but the browser does not open automatically
 
-Likely causes:
+If WSL reports:
 
-- The Pinecone index is empty.
-- `PINECONE_INDEX` points to the wrong index.
-- The corpus was not rebuilt after PDF changes.
-- The question does not match the available documents.
-
-Fix:
-
-```bash
-python -m scripts.02_prepare_energy_json
-python -m scripts.03_index_pinecone --chunks data/critical_infra_corpus.jsonl --reset
+``` text
+gio: http://localhost:8501: Operation not supported
 ```
 
-## FAQ
+open `http://localhost:8501` manually in Windows.
 
-### What is RAG?
+## The bot says it cannot find enough evidence
 
-RAG means retrieval-augmented generation. In plain English, the app first searches documents, then asks an AI model to answer using those documents.
+This may be the correct result. Possible causes include an empty shared
+Pinecone index, a corpus that does not address the question, or an
+incorrect `PINECONE_INDEX` value.
 
-### Where is my data stored?
+The application is designed to avoid unsupported answers when sufficient
+evidence is unavailable.
 
-The local source documents are in `data/pdf/`. Extracted text is in `data/critical_infra_corpus.jsonl`. Search vectors are stored in Pinecone.
+# FAQ
 
-### Does this app have user accounts?
+## What is RAG?
 
-No. No login, roles, or user account system was found in this repository.
+RAG means retrieval-augmented generation. The application first searches
+available evidence, then asks an AI model to answer using that evidence.
 
-### Does this app have an API?
+## Where is my data stored?
 
-No HTTP API endpoints were found. The app is used through Streamlit or command-line scripts.
+Source documents used for a research corpus are placed in `data/pdf/`.
+Extracted text is written to `data/critical_infra_corpus.jsonl`. Search
+vectors are stored in Pinecone.
 
-### Is there a database?
+## Does this app have user accounts?
 
-There is no traditional database. The project uses local files and Pinecone.
+No.
 
-### Can I use it without Pinecone?
+## Does this app have an API?
 
-Partly. The code can fall back to local keyword retrieval if Pinecone access fails, but Pinecone is required for the intended vector search workflow.
+No HTTP API endpoints were found. The app is used through Streamlit or
+command-line scripts.
 
-## More Documentation
+## Is there a database?
+
+There is no traditional database in the current RAG flow. The project
+uses local files and Pinecone.
+
+## Can I use it without Pinecone?
+
+Partly. The code can fall back to local keyword retrieval if Pinecone
+access fails, but Pinecone is required for the intended vector-search
+workflow.
+
+# More Documentation
 
 Start with [docs/README.md](docs/README.md).
 
 Recommended reading order:
 
-1. [Getting Started](docs/getting-started.md)
-2. [Configuration](docs/configuration.md)
-3. [First Run](docs/first-run.md)
-4. [Daily Usage](docs/daily-usage.md)
-5. [Troubleshooting](docs/troubleshooting.md)
-6. [Developer Guide](docs/developer-guide.md)
+1.  [Getting Started](docs/getting-started.md)
+2.  [Configuration](docs/configuration.md)
+3.  [First Run](docs/first-run.md)
+4.  [Daily Usage](docs/daily-usage.md)
+5.  [Troubleshooting](docs/troubleshooting.md)
+6.  [Developer Guide](docs/developer-guide.md)
