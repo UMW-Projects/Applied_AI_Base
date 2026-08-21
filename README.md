@@ -106,11 +106,18 @@ python3 -m venv venv
 ```
 
 ## 3. Turn On the Virtual Environment
-
+MacOS/Linux/WSL
 ``` bash
 source venv/bin/activate
 ```
-
+Windows
+``` bash
+venv\Scripts\Activate.ps1
+```
+If Windows PowerShell blocks the script, this  resolves it:
+``` bash
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
 Your terminal prompt should now begin with `(venv)`.
 
 Verify Python inside the environment:
@@ -166,7 +173,11 @@ With `(venv)` visible in your terminal prompt:
 ``` bash
 streamlit run streamlit_app.py
 ```
+Note: On Windows the above command will not run if pip installed at the user level. This can be resolved by running :
 
+``` bash
+python -m streamlit run streamlit_app.py
+```
 The first time Streamlit runs, it may ask whether you want to provide an
 email address. You may leave the field blank and press Enter.
 
