@@ -22,7 +22,6 @@ st.markdown(
         padding-bottom: 3rem;
     }
     [data-testid="stSidebar"] {
-        background: #f7f8fa;
         border-right: 1px solid #e6e9ef;
     }
     .app-header {
@@ -51,7 +50,6 @@ st.markdown(
     div[data-testid="stChatMessage"] {
         border: 1px solid #e1e5ec;
         border-radius: 8px;
-        background: #ffffff;
         padding: .35rem .55rem;
     }
     .stButton > button {
