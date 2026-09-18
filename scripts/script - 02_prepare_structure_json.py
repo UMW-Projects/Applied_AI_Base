@@ -8,7 +8,7 @@ from PyPDF2 import PdfReader
 # -------- CONFIG --------
 ROOT_DIR = Path(__file__).resolve().parent.parent
 BASE_DIR = ROOT_DIR / "data" / "pdf"
-OUTPUT_FILE = ROOT_DIR / "data" / "critical_infra_corpus.jsonl"
+OUTPUT_FILE = ROOT_DIR / "data" / "structure_corpus.jsonl"
 
 SECTOR = "Energy"
 ORGANIZATION = "NERC"
