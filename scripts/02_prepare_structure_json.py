@@ -8,43 +8,72 @@ from PyPDF2 import PdfReader
 # -------- CONFIG --------
 ROOT_DIR = Path(__file__).resolve().parent.parent
 BASE_DIR = ROOT_DIR / "data" / "pdf"
-OUTPUT_FILE = ROOT_DIR / "data" / "critical_infra_corpus.jsonl"
+OUTPUT_FILE = ROOT_DIR / "data" / "structure_corpus.jsonl"
 
 SECTOR = "Energy"
 ORGANIZATION = "NERC"
 REGULATION_FAMILY = "NERC CIP"
 DOCUMENT_TYPE = "Standard"
 
-CHUNK_SIZE = 800  # characters per chunk
+CHUNK_SIZE = 900
+CHUNK_OVERLAP = 100
+CHUNKING_VERSION = "sentence-overlap-v1"
 # ------------------------
 
 
 def clean_text(text):
-    text = re.sub(r'\s+', ' ', text)
-    return text.strip()
+    return re.sub(r"\s+", " ", text or "").strip()
 
 
-def chunk_text(text, chunk_size=800):
-    # naive sentence split on period, question mark, exclamation
-    import re
-    sentences = re.split(r'(?<=[.!?])\s+', text)
+def chunk_text(text, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP):
+    cleaned = clean_text(text)
+    if not cleaned:
+        return []
+
+    sentences = re.split(r"(?<=[.!?])\s+", cleaned)
     chunks = []
     current = ""
 
-    for sent in sentences:
-        if len(current) + len(sent) <= chunk_size:
-            current += " " + sent
-        else:
-            if current.strip():
-                chunks.append(current.strip())
-            current = sent
+    for sentence in sentences:
+        sentence = sentence.strip()
+        if not sentence:
+            continue
 
-    if current.strip():
+        if len(sentence) > chunk_size:
+            if current:
+                chunks.append(current.strip())
+                current = ""
+
+            step = max(chunk_size - overlap, 1)
+            start = 0
+            while start < len(sentence):
+                remaining = len(sentence) - start
+                if remaining < overlap and chunks:
+                    start = len(sentence) - chunk_size
+                    remaining = chunk_size
+
+                chunk = sentence[start:start + chunk_size].strip()
+                if chunk:
+                    chunks.append(chunk)
+
+                if remaining <= chunk_size:
+                    break
+                start += step
+            continue
+
+        proposed = f"{current} {sentence}".strip()
+        if current and len(proposed) > chunk_size:
+            chunks.append(current.strip())
+            overlap_text = current[-overlap:]
+            combined = f"{overlap_text} {sentence}".strip()
+            current = combined if len(combined) <= chunk_size else sentence
+        else:
+            current = proposed
+
+    if current:
         chunks.append(current.strip())
 
-    return chunks
-
-
+    return [chunk.strip() for chunk in chunks if chunk.strip()]
 
 def extract_keywords(text):
     words = re.findall(r'\b[a-zA-Z]{6,}\b', text.lower())
@@ -71,10 +100,12 @@ def process_pdf(pdf_path, chunk_id_start):
         if not cleaned:
             continue
 
-        chunks = chunk_text(cleaned, CHUNK_SIZE)
+        chunks = chunk_text(cleaned)
 
         for idx, chunk in enumerate(chunks):
             entry = {
+                "chunking_version": CHUNKING_VERSION,
+                "chunk_char_count": len(chunk),
                 "chunk_id": f"energy-{chunk_counter:06d}",
                 "source_file": pdf_name,
                 "document_title": title_guess,
@@ -82,7 +113,6 @@ def process_pdf(pdf_path, chunk_id_start):
                 "sector": SECTOR,
                 "document_type": DOCUMENT_TYPE,
                 "regulation_family": REGULATION_FAMILY,
-                "topic": title_guess,
                 "page_number": page_num,
                 "chunk_index": idx,
                 "text": chunk,
