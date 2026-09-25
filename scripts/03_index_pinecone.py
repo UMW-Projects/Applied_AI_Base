@@ -244,6 +244,8 @@ def main(chunks_path: str, reset: bool = False, namespace: str = ""):
                 "chunk_index": int(item.get("chunk_index", 0)),
                 "text": item.get("text", "")[:4000],  # prevent oversized payloads
                 "controls": controls,  # 🔥 NEW: control-aware retrieval
+				"chunking_version": item.get("chunking_version", ""),
+				"chunk_char_count": int(item.get("chunk_char_count", len(item.get("text", "")))),
             }
 
             metadata = clean_metadata(metadata)

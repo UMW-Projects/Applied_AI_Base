@@ -15,35 +15,95 @@ ORGANIZATION = "NERC"
 REGULATION_FAMILY = "NERC CIP"
 DOCUMENT_TYPE = "Standard"
 
-CHUNK_SIZE = 800  # characters per chunk
+CHUNK_SIZE = 900  # characters per chunk
+CHUNK_OVERLAP = 100
+CHUNKING_VERSION = "sentence-overlap-v1"
 # ------------------------
 
 
 def clean_text(text):
-    text = re.sub(r'\s+', ' ', text)
-    return text.strip()
+    return re.sub(r"\s+", " ", text or "").strip() 
 
 
-def chunk_text(text, chunk_size=800):
-    # naive sentence split on period, question mark, exclamation
-    import re
+def chunk_text(text, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP):
     sentences = re.split(r'(?<=[.!?])\s+', text)
+
     chunks = []
     current = ""
 
-    for sent in sentences:
-        if len(current) + len(sent) <= chunk_size:
-            current += " " + sent
-        else:
-            if current.strip():
-                chunks.append(current.strip())
-            current = sent
+    for sentence in sentences:
+        sentence = sentence.strip()
 
+        if not sentence:
+            continue
+
+        # Handle an unusually long sentence.
+        if len(sentence) > chunk_size:
+            # Save anything already accumulated.
+            if current:
+                chunks.append(current.strip())
+                current = ""
+
+            # Split the long sentence into overlapping windows.
+            start = 0
+
+            while start < len(sentence):
+                end = min(start + chunk_size, len(sentence))
+                piece = sentence[start:end].strip()
+
+                if piece:
+                    chunks.append(piece)
+
+                # If this is the final piece, we're done.
+                if end == len(sentence):
+                    break
+
+                # Move backward by the overlap amount for the next window.
+                start = end - overlap
+
+            continue
+
+        # If this is the first sentence in the current chunk.
+        if not current:
+            current = sentence
+
+        # Otherwise, try adding the sentence to the current chunk.
+        elif len(current) + 1 + len(sentence) <= chunk_size:
+            current += " " + sentence
+
+        else:
+            # Save the current chunk.
+            chunks.append(current.strip())
+
+            # Carry approximately 100 characters into the next chunk.
+            overlap_text = current[-overlap:]
+
+            # Add the new sentence after the overlap.
+            current = overlap_text + " " + sentence
+
+            # Safety check in case the overlap + sentence is too large.
+            if len(current) > chunk_size:
+                current = sentence
+
+    # Save the final chunk.
     if current.strip():
         chunks.append(current.strip())
 
-    return chunks
+    # If the final chunk contains less text than the desired overlap,
+    # shift its starting point backward into the previous chunk.
+    if len(chunks) >= 2 and len(chunks[-1]) < overlap:
+        final_chunk = chunks[-1]
+        previous_chunk = chunks[-2]
 
+        # Keep the final ending exactly where it is and move
+        # the beginning backward, up to the maximum chunk size.
+        available = chunk_size - len(final_chunk) - 1
+
+        if available > 0:
+            prefix = previous_chunk[-available:]
+            chunks[-1] = (prefix + " " + final_chunk).strip()
+
+    return chunks
 
 
 def extract_keywords(text):
@@ -55,12 +115,10 @@ def extract_keywords(text):
     sorted_words = sorted(freq.items(), key=lambda x: x[1], reverse=True)
     return [w for w, _ in sorted_words[:5]]
 
-
 def process_pdf(pdf_path, chunk_id_start):
     reader = PdfReader(pdf_path)
     pdf_name = os.path.basename(pdf_path)
     title_guess = pdf_name.replace(".pdf", "").replace("_", " ")
-
     entries = []
     chunk_counter = chunk_id_start
 
@@ -71,7 +129,7 @@ def process_pdf(pdf_path, chunk_id_start):
         if not cleaned:
             continue
 
-        chunks = chunk_text(cleaned, CHUNK_SIZE)
+        chunks = chunk_text(cleaned)
 
         for idx, chunk in enumerate(chunks):
             entry = {
@@ -82,17 +140,19 @@ def process_pdf(pdf_path, chunk_id_start):
                 "sector": SECTOR,
                 "document_type": DOCUMENT_TYPE,
                 "regulation_family": REGULATION_FAMILY,
-                "topic": title_guess,
+                "section_title": title_guess,
                 "page_number": page_num,
                 "chunk_index": idx,
                 "text": chunk,
+                "chunking_version": CHUNKING_VERSION,
+                "chunk_char_count": len(chunk),
                 "keywords": extract_keywords(chunk)
             }
+
             entries.append(entry)
             chunk_counter += 1
 
     return entries, chunk_counter
-
 
 def main():
     pdf_files = [f for f in BASE_DIR.glob("*.pdf")]
