@@ -3,6 +3,7 @@ import json
 import re
 import datetime
 import hashlib
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from collections import defaultdict
@@ -56,6 +57,15 @@ WEB_CHUNK_SIZE = 2000
 WEB_CHUNK_OVERLAP = 200
 WEB_MAX_DOC_CHARS = 12000
 WEB_METADATA_TEXT_CHARS = 4000
+
+# Reranking: retrieve a wider candidate pool with the existing vector search,
+# then re-score candidates against the query and keep the best top_k.
+RERANK_METHODS = ("none", "pinecone", "llm", "lexical")
+RERANK_METHOD_DEFAULT = "pinecone"
+RERANK_MODEL_DEFAULT = "bge-reranker-v2-m3"
+RERANK_CANDIDATES_DEFAULT = 50
+RERANK_CANDIDATES_MAX = 100  # bge-reranker-v2-m3 accepts at most 100 documents per call
+RERANK_LLM_TEXT_CHARS = 700
 
 
 # =========================================================
@@ -1200,6 +1210,175 @@ def retrieve(
 
 
 # =========================================================
+# RERANKING
+# =========================================================
+def resolve_rerank_method(method: Optional[str] = None) -> str:
+    value = (method or os.getenv("RERANK_METHOD", RERANK_METHOD_DEFAULT)).strip().lower()
+    return value if value in RERANK_METHODS else "none"
+
+
+def rerank_candidate_count(top_k: int) -> int:
+    configured = _env_int("RERANK_CANDIDATES", RERANK_CANDIDATES_DEFAULT)
+    return min(max(configured, top_k * 2), RERANK_CANDIDATES_MAX)
+
+
+def _rerank_document_text(context: Dict[str, Any]) -> str:
+    return f"{context.get('document_title') or ''}\n\n{context.get('text') or ''}".strip()
+
+
+def _rerank_scores_pinecone(query: str, contexts: List[Dict[str, Any]]) -> List[float]:
+    pc = Pinecone(api_key=_env("PINECONE_API_KEY"))
+    result = pc.inference.rerank(
+        model=os.getenv("RERANK_MODEL", RERANK_MODEL_DEFAULT),
+        query=query,
+        documents=[{"text": _rerank_document_text(c)} for c in contexts],
+        rank_fields=["text"],
+        return_documents=False,
+        parameters={"truncate": "END"},
+    )
+
+    scores = [0.0] * len(contexts)
+    for item in getattr(result, "data", []) or []:
+        idx = getattr(item, "index", None)
+        if idx is None and isinstance(item, dict):
+            idx = item.get("index")
+        score = getattr(item, "score", None)
+        if score is None and isinstance(item, dict):
+            score = item.get("score")
+        if idx is not None and 0 <= int(idx) < len(scores):
+            scores[int(idx)] = float(score or 0.0)
+    return scores
+
+
+def _rerank_scores_llm(query: str, contexts: List[Dict[str, Any]]) -> List[float]:
+    client = OpenAI(api_key=_env("OPENAI_API_KEY"))
+    model = os.getenv("RERANK_LLM_MODEL", os.getenv("OPENAI_MODEL", "gpt-4.1-mini"))
+
+    passages = []
+    for i, c in enumerate(contexts):
+        text = re.sub(r"\s+", " ", c.get("text") or "").strip()[:RERANK_LLM_TEXT_CHARS]
+        passages.append(f"[{i}] ({c.get('document_title')}) {text}")
+
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You rank evidence passages for an energy-sector cybersecurity assistant. "
+                "Score each passage 0-10 for how directly it helps answer the question: "
+                "10 = directly answers it with specific evidence, 5 = related background, "
+                "0 = off-topic, boilerplate, acronym lists, or tables of contents. "
+                'Return JSON only: {"scores": [{"index": 0, "score": 7}, ...]} covering every passage.'
+            ),
+        },
+        {"role": "user", "content": f"QUESTION:\n{query}\n\nPASSAGES:\n" + "\n\n".join(passages)},
+    ]
+    resp = client.chat.completions.create(
+        model=model,
+        messages=messages,
+        response_format={"type": "json_object"},
+        temperature=0,
+    )
+    data = json.loads(_extract_json_object(resp.choices[0].message.content or ""))
+
+    scores = [0.0] * len(contexts)
+    for item in data.get("scores", []) or []:
+        try:
+            idx = int(item.get("index"))
+            if 0 <= idx < len(scores):
+                scores[idx] = float(item.get("score", 0.0)) / 10.0
+        except (TypeError, ValueError, AttributeError):
+            continue
+    return scores
+
+
+def _rerank_scores_lexical(query: str, contexts: List[Dict[str, Any]]) -> List[float]:
+    query_terms = {t for t in _tokenize(query) if len(t) > 2}
+    if not query_terms:
+        return [0.0] * len(contexts)
+
+    scores = []
+    for c in contexts:
+        tokens = _tokenize(_rerank_document_text(c))
+        coverage = len(query_terms & tokens) / len(query_terms)
+        penalty = 0.5 if _is_low_value_context(c) else 1.0
+        scores.append(coverage * penalty)
+    return scores
+
+
+def rerank_contexts(
+    query: str,
+    contexts: List[Dict[str, Any]],
+    top_k: int,
+    method: Optional[str] = None,
+) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    """Re-score retrieved candidates against the query and keep the best top_k.
+
+    Each returned context keeps its original vector "score" and gains
+    "retrieval_rank" (position before reranking) and "rerank_score".
+    Falls back to lexical reranking if the requested reranker fails.
+    """
+    method = resolve_rerank_method(method)
+    info: Dict[str, Any] = {"method": method, "candidates": len(contexts)}
+
+    if method == "none" or not contexts:
+        return contexts[:top_k], info
+
+    scorers = {
+        "pinecone": _rerank_scores_pinecone,
+        "llm": _rerank_scores_llm,
+        "lexical": _rerank_scores_lexical,
+    }
+    try:
+        scores = scorers[method](query, contexts)
+    except Exception as exc:
+        info["error"] = f"{method}: {exc}"
+        info["method"] = "lexical"
+        scores = _rerank_scores_lexical(query, contexts)
+
+    ranked = []
+    for rank, (context, score) in enumerate(zip(contexts, scores), start=1):
+        ranked.append({**context, "retrieval_rank": rank, "rerank_score": float(score)})
+    ranked.sort(key=lambda c: c["rerank_score"], reverse=True)
+    return ranked[:top_k], info
+
+
+def retrieve_and_rerank(
+    query: str,
+    top_k: int = 8,
+    rerank: Optional[str] = None,
+) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    method = resolve_rerank_method(rerank)
+    candidate_k = top_k if method == "none" else rerank_candidate_count(top_k)
+
+    t0 = time.perf_counter()
+    candidates = retrieve(query, top_k=candidate_k)
+    t1 = time.perf_counter()
+    contexts, info = rerank_contexts(query, candidates, top_k=top_k, method=method)
+    t2 = time.perf_counter()
+
+    info["requested_method"] = method
+    info["candidate_k"] = candidate_k
+    info["retrieval_ms"] = round((t1 - t0) * 1000, 1)
+    info["rerank_ms"] = round((t2 - t1) * 1000, 1)
+    return contexts, info
+
+
+def _retrieved_context_debug(contexts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [
+        {
+            "chunk_id": c.get("chunk_id"),
+            "document_title": c.get("document_title"),
+            "page_number": c.get("page_number"),
+            "vector_score": c.get("score"),
+            "retrieval_rank": c.get("retrieval_rank"),
+            "rerank_score": c.get("rerank_score"),
+            "text": c.get("text"),
+        }
+        for c in contexts
+    ]
+
+
+# =========================================================
 # AGGREGATION
 # =========================================================
 def aggregate_contexts(contexts: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -1356,15 +1535,29 @@ def generate_grounded_response(
     top_k: int = 8,
     min_recurring_reviews: int = 2,
     include_debug: bool = False,
+    rerank: Optional[str] = None,
 ):
 
     workflow = wants_workflow_output(query)
 
-    contexts = retrieve(query, top_k=top_k)
+    contexts, rerank_info = retrieve_and_rerank(query, top_k=top_k, rerank=rerank)
+
+    def _attach_retrieval_debug(out: Dict[str, Any], generation_ms: float) -> None:
+        if not include_debug:
+            return
+        debug = out.setdefault("debug", {})
+        debug["retrieval"] = rerank_info
+        debug["latency_ms"] = {
+            "retrieval": rerank_info.get("retrieval_ms"),
+            "rerank": rerank_info.get("rerank_ms"),
+            "generation": round(generation_ms, 1),
+        }
+        debug["retrieved_contexts"] = _retrieved_context_debug(contexts)
 
     try:
         client = OpenAI(api_key=_env("OPENAI_API_KEY"))
     except RuntimeError:
+        gen_start = time.perf_counter()
         agg = aggregate_contexts(contexts)
         out = _build_local_grounded_response(
             query=query,
@@ -1375,7 +1568,10 @@ def generate_grounded_response(
         )
         out = _sanitize_generated_output(out, contexts)
         out["retrieval_sources"] = _retrieval_sources(contexts)
+        _attach_retrieval_debug(out, (time.perf_counter() - gen_start) * 1000)
         return out
+
+    gen_start = time.perf_counter()
 
     external_contexts, external_stats = refresh_external_contexts(query, client)
     combined_limit = max(top_k + len(external_contexts), top_k)
@@ -1456,5 +1652,6 @@ def generate_grounded_response(
 
     out = _sanitize_generated_output(out, contexts)
     out["retrieval_sources"] = _retrieval_sources(contexts)
+    _attach_retrieval_debug(out, (time.perf_counter() - gen_start) * 1000)
 
     return out
