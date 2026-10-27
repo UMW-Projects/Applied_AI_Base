@@ -1,3 +1,4 @@
+from reranker import rerank_contexts, select_diverse_contexts
 import os
 import json
 import re
@@ -1360,7 +1361,22 @@ def generate_grounded_response(
 
     workflow = wants_workflow_output(query)
 
-    contexts = retrieve(query, top_k=top_k)
+    # Retrieve more candidates before reranking
+    candidate_contexts = retrieve(query, top_k=max(20, top_k))
+
+    # Select the most relevant evidence
+    ranked_contexts = rerank_contexts(
+        query=query,
+        contexts=candidate_contexts,
+        top_k=len(candidate_contexts),
+    )
+
+    contexts = select_diverse_contexts(
+        ranked=ranked_contexts,
+        top_k=top_k,
+        max_per_document=3,
+        min_relevance=5.0,
+    )
 
     try:
         client = OpenAI(api_key=_env("OPENAI_API_KEY"))
