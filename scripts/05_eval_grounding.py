@@ -22,8 +22,10 @@ def _chunk_ids_from_items(items: Any) -> List[str]:
 
     for item in items:
         if isinstance(item, dict):
-            for key in ("source_chunk_ids", "evidence_chunk_ids", "grounding_chunk_ids"):
+            for key in ("source_chunk_ids", "evidence_chunk_ids", "grounding_chunk_ids", "evidence", "chunk_id"):
                 values = item.get(key) or []
+                if isinstance(values, str):
+                    values = [values]
                 if isinstance(values, list):
                     chunk_ids.extend(str(v) for v in values if v)
         elif isinstance(item, str) and item.startswith("energy-"):
