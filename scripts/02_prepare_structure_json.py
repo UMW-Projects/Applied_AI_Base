@@ -15,7 +15,11 @@ ORGANIZATION = "NERC"
 REGULATION_FAMILY = "NERC CIP"
 DOCUMENT_TYPE = "Standard"
 
-CHUNK_SIZE = 800  # characters per chunk
+# Phase 1 Chunking Configurations
+MIN_CHUNK_SIZE = 600
+MAX_CHUNK_SIZE = 900
+OVERLAP_SIZE = 100
+CHUNKING_VERSION = "retrieval-structure-v1"
 # ------------------------
 
 
@@ -24,26 +28,43 @@ def clean_text(text):
     return text.strip()
 
 
-def chunk_text(text, chunk_size=800):
-    # naive sentence split on period, question mark, exclamation
-    import re
+def extract_section_title(text, current_title="General Context"):
+    """
+    Detects dynamic section headers in NERC CIP/Standard documents 
+    (e.g., '1. Requirement', 'R1. Access Control', 'CIP-007-6 - Section A').
+    """
+    match = re.search(r'((?:R\d+|Requirement\s+\d+|Section\s+[A-Z\d]+|[0-9]+\.[0-9]*)\s*[-:]?\s*[^.\n]{3,60})', text, re.IGNORECASE)
+    if match:
+        return match.group(1).strip()
+    return current_title
+
+
+def chunk_text_structured(text, min_size=600, max_size=900, overlap=100):
+    """
+    Groups sentences into structure-aware chunks between 600 and 900 characters
+    while maintaining a ~100 character overlap across neighboring chunks.
+    """
     sentences = re.split(r'(?<=[.!?])\s+', text)
     chunks = []
-    current = ""
+    current_chunk = ""
 
     for sent in sentences:
-        if len(current) + len(sent) <= chunk_size:
-            current += " " + sent
+        if len(current_chunk) + len(sent) + 1 <= max_size:
+            current_chunk = f"{current_chunk} {sent}".strip()
         else:
-            if current.strip():
-                chunks.append(current.strip())
-            current = sent
+            if len(current_chunk) >= min_size:
+                chunks.append(current_chunk)
+                # Apply overlap by pulling the trailing characters of the previous chunk
+                overlap_text = current_chunk[-overlap:] if len(current_chunk) >= overlap else current_chunk
+                current_chunk = f"{overlap_text} {sent}".strip()
+            else:
+                # If current chunk is below min_size, append sentence to meet target size
+                current_chunk = f"{current_chunk} {sent}".strip()
 
-    if current.strip():
-        chunks.append(current.strip())
+    if current_chunk:
+        chunks.append(current_chunk)
 
     return chunks
-
 
 
 def extract_keywords(text):
@@ -63,6 +84,7 @@ def process_pdf(pdf_path, chunk_id_start):
 
     entries = []
     chunk_counter = chunk_id_start
+    active_section_title = "Document Header"
 
     for page_num, page in enumerate(reader.pages, start=1):
         raw_text = page.extract_text() or ""
@@ -71,7 +93,10 @@ def process_pdf(pdf_path, chunk_id_start):
         if not cleaned:
             continue
 
-        chunks = chunk_text(cleaned, CHUNK_SIZE)
+        # Extract or update section heading context for this page
+        active_section_title = extract_section_title(cleaned, active_section_title)
+
+        chunks = chunk_text_structured(cleaned, MIN_CHUNK_SIZE, MAX_CHUNK_SIZE, OVERLAP_SIZE)
 
         for idx, chunk in enumerate(chunks):
             entry = {
@@ -83,6 +108,9 @@ def process_pdf(pdf_path, chunk_id_start):
                 "document_type": DOCUMENT_TYPE,
                 "regulation_family": REGULATION_FAMILY,
                 "topic": title_guess,
+                "section_title": active_section_title,
+                "chunking_version": CHUNKING_VERSION,
+                "chunk_char_count": len(chunk),
                 "page_number": page_num,
                 "chunk_index": idx,
                 "text": chunk,
@@ -108,7 +136,7 @@ def main():
         for entry in all_entries:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
-    print(f"\nDone! JSONL corpus saved to:\n{OUTPUT_FILE}")
+    print(f"\nDone! Structure-aware JSONL corpus saved to:\n{OUTPUT_FILE}")
 
 
 if __name__ == "__main__":

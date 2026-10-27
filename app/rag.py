@@ -1120,7 +1120,7 @@ def _sanitize_generated_output(out: Dict[str, Any], contexts: List[Dict[str, Any
 
 def retrieve(
     query: str,
-    top_k: int = 8,
+    top_k: int = 25,
     min_score: float = 0.65,
     exclude_owner_responses: bool = True,
 ) -> List[Dict[str, Any]]:
@@ -1128,18 +1128,18 @@ def retrieve(
         client = OpenAI(api_key=_env("OPENAI_API_KEY"))
         pc = Pinecone(api_key=_env("PINECONE_API_KEY"))
         index = pc.Index(_env("PINECONE_INDEX"))
-
+                 
         qvec = embed(client, query, os.getenv("OPENAI_EMBED_MODEL", EMBED_MODEL_DEFAULT))
-
+    
         filt = {}
-
+         
         org = detect_organization(query)
         if org:
             filt["organization"] = {"$eq": org}
-
+             
         if exclude_owner_responses:
             filt["is_owner_response"] = {"$ne": True}
-
+                         
         res = index.query(
             vector=qvec,
             top_k=top_k,
@@ -1148,23 +1148,21 @@ def retrieve(
             filter=filt if filt else None,
             namespace=os.getenv("PINECONE_NAMESPACE", ""),
         )
-
+         
         matches = getattr(res, "matches", []) or []
-
+    
         contexts = []
-
+    
         for m in matches:
             md = _as_dict(m)
             meta = md.get("metadata", {}) or {}
-
+        
             score = float(md.get("score", 0.0))
-            if score < min_score:
-                continue
-
+        
             text = meta.get("text", "")
-
+        
             controls, _ = detect_controls(text)
-
+        
             contexts.append({
                 "id": md.get("id"),
                 "score": score,
@@ -1177,20 +1175,37 @@ def retrieve(
                 "text": text,
                 "controls": controls,
                 "source_url": meta.get("source_url"),
-                "retrieved_at": meta.get("retrieved_at"),
-                "is_external": bool(meta.get("is_external", False)),
-            })
-
+                "retrieved_at": meta.get("retrieved_at"), 
+                "is_external": bool(meta.get("is_external", False)),})
+        
+        # --- TWO-STAGE RERANKING WRAPPER ---
+        if contexts:
+            try:
+                rerank_res = pc.inference.rerank(
+                    model="bge-reranker-v2-m3",
+                    query=query,
+                    documents=[{"id": str(c["id"]), "text": c["text"]} for c in contexts],
+                    top_n=min(len(contexts), top_k),
+                    return_documents=True
+                )
+                reranked_scores = {item.document["id"]: item.score for item in rerank_res.data}
+                for c in contexts:
+                    if str(c["id"]) in reranked_scores:
+                        c["score"] = reranked_scores[str(c["id"])]
+            except Exception as e:
+                print(f"Reranking skipped: {e}")
+        # -----------------------------------
+        
         seen = set()
-        deduped = []
-
+        deduped = [] 
+    
         for c in sorted(contexts, key=lambda x: x["score"], reverse=True):
             if c["chunk_id"] in seen:
                 continue
             seen.add(c["chunk_id"])
             deduped.append(c)
-
-        return deduped
+           
+        return deduped  
     except Exception:
         return _fallback_retrieve(
             query=query,
